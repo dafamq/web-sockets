@@ -1,20 +1,28 @@
 const chat = document.getElementById("chat");
 const messageInput = document.getElementById("message");
 const sendButton = document.getElementById("send");
+const disconnectButton = document.getElementById("disconnect");
 
 let reconnectAttempts = 0;
 let socket = null;
 let isWindowActive = true;
+let userDisconnectInitiated = false;
 
 function connect() {
 	socket = new WebSocket("ws://localhost:8080");
 
 	socket.onopen = () => {
 		addMessage("Connected to the chat.", "info");
+		messageInput.disabled = false;
+		sendButton.disabled = false;
+		disconnectButton.classList.remove("connect");
+		disconnectButton.textContent = "Disconnect";
 		reconnectAttempts = 0;
+		userDisconnectInitiated = false;
 	};
 
 	socket.onclose = () => {
+		if (userDisconnectInitiated) return;
 		if (reconnectAttempts < 5) {
 			setTimeout(() => {
 				reconnectAttempts++;
@@ -70,6 +78,35 @@ sendButton.addEventListener("click", () => {
 		socket.send(JSON.stringify({ type: "message", message }));
 		messageInput.value = "";
 	}
+});
+
+disconnectButton.addEventListener("click", () => {
+	if (userDisconnectInitiated) {
+		connect();
+		return;
+	}
+
+	fetch("http://localhost:8080/disconnect", {
+		method: "GET",
+	})
+		.then((response) => {
+			if (response.ok) {
+				socket.close();
+				userDisconnectInitiated = true;
+				sendButton.disabled = true;
+				messageInput.disabled = true;
+				disconnectButton.classList.add("connect");
+				disconnectButton.textContent = "Connect";
+				addMessage(
+					'Disconnected from the chat. Click "Connect" to reconnect.',
+					"info"
+				);
+			}
+		})
+		.catch((error) => {
+			addMessage("Failed to disconnect.", "error");
+			console.error("Помилка при відключенні:", error);
+		});
 });
 
 document.addEventListener("visibilitychange", () => {

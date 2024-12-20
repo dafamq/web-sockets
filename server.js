@@ -1,9 +1,41 @@
+const http = require("http");
 const WebSocket = require("ws");
 
-const server = new WebSocket.Server({ port: 8080 });
+const wsServer = new WebSocket.Server({ noServer: true });
 let clients = new Set();
 
-server.on("connection", (socket) => {
+const server = http.createServer((req, res) => {
+	// CORS headers
+	res.setHeader("Access-Control-Allow-Origin", "*");
+	res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+	res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+	// Handle preflight request (OPTIONS)
+	if (req.method === "OPTIONS") {
+		res.writeHead(204);
+		res.end();
+		return;
+	}
+
+	// Handle disconnect route
+	if (req.url === "/disconnect" && req.method === "GET") {
+		const socket = req.socket;
+
+		clients.delete(socket);
+		res.writeHead(200, { "Content-Type": "application/json" });
+		res.end(
+			JSON.stringify({
+				type: "success",
+				message: "Disconnected successfully",
+			})
+		);
+	} else {
+		res.writeHead(404, { "Content-Type": "application/json" });
+		res.end(JSON.stringify({ type: "error", message: "Not Found" }));
+	}
+});
+
+wsServer.on("connection", (socket) => {
 	clients.add(socket);
 	console.log("New user joined");
 
@@ -48,4 +80,12 @@ function broadcast(data, sender) {
 	});
 }
 
-console.log("WebSocket server running on ws://localhost:8080");
+server.on("upgrade", (req, socket, head) => {
+	wsServer.handleUpgrade(req, socket, head, (ws) => {
+		wsServer.emit("connection", ws, req);
+	});
+});
+
+server.listen(8080, () => {
+	console.log("WebSocket server running on ws://localhost:8080");
+});
